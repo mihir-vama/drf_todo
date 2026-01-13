@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Todo App</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; max-width:800px;margin:2rem auto;padding:0 1rem; }
+    header { display:flex;justify-content:space-between;align-items:center }
+    .todo { border:1px solid #ddd;padding:0.75rem;margin:0.5rem 0;border-radius:6px;display:flex;justify-content:space-between }
+    .todo h3 { margin:0 0 0.25rem 0 }
+    .controls button { margin-left:0.5rem }
+    form { margin-top:1rem }
+    label { display:block;margin:0.5rem 0 0.25rem }
+    input[type=text], textarea { width:100%;padding:0.5rem;border-radius:4px;border:1px solid #ccc }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Simple Todo UI</h1>
+    <small>/ui/</small>
+  </header>
+
+  <section>
+    <h2>Todos</h2>
+    <div id="todos"></div>
+  </section>
+
+  <section>
+    <h2>Add Todo</h2>
+    <form id="add-form">
+      <label for="title">Title</label>
+      <input id="title" name="title" type="text" required>
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="4"></textarea>
+      <div style="margin-top:0.5rem">
+        <button type="submit">Add</button>
+      </div>
+    </form>
+  </section>
+
+<script>
+// helper to read cookie for csrf token
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+const csrftoken = getCookie('csrftoken');
+
+async function fetchTodos(){
+  const res = await fetch('/apis/');
+  const data = await res.json();
+  const container = document.getElementById('todos');
+  container.innerHTML = '';
+  if(!data.length){
+    container.innerHTML = '<p>No todos yet.</p>';
+    return;
+  }
+  data.forEach(todo => {
+    const el = document.createElement('div');
+    el.className = 'todo';
+    el.innerHTML = `
+      <div>
+        <h3>${escapeHtml(todo.title)}</h3>
+        <div class="desc">${escapeHtml(todo.description || '')}</div>
+      </div>
+      <div class="controls">
+        <button data-id="${todo.id}" class="edit">Edit</button>
+        <button data-id="${todo.id}" class="del">Delete</button>
+      </div>
+    `;
+    container.appendChild(el);
+  });
+}
+
+function escapeHtml(s){
+  if(!s) return '';
+  return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+// actions: delete, edit, cancel
+document.addEventListener('click', async (e) => {
+  if (e.target.matches('.del')) {
+    const id = e.target.dataset.id;
+    if (!confirm('Delete this todo?')) return;
+    await fetch(`/apis/${id}/`, { method: 'DELETE', headers: { 'X-CSRFToken': csrftoken } });
+    fetchTodos();
+    return;
+  }
+
+  if (e.target.matches('.edit')) {
+    const id = e.target.dataset.id;
+    const todoDiv = e.target.closest('.todo');
+    const title = todoDiv.querySelector('h3').innerText;
+    const descEl = todoDiv.querySelector('.desc');
+    const description = descEl ? descEl.innerText : '';
+    todoDiv.innerHTML = `
+      <form class="edit-form" data-id="${id}">
+        <label for="etitle">Title</label>
+        <input name="title" id="etitle" type="text" value="${escapeHtml(title)}" required>
+        <label for="edesc">Description</label>
+        <textarea name="description" id="edesc" rows="3">${escapeHtml(description)}</textarea>
+        <div style="margin-top:0.5rem">
+          <button type="submit">Save</button>
+          <button type="button" class="cancel-edit">Cancel</button>
+        </div>
+      </form>
+    `;
+    return;
+  }
+
+  if (e.target.matches('.cancel-edit')) {
+    // simply re-load list to restore view
+    fetchTodos();
+    return;
+  }
+});
+
+// edit form submit
+document.addEventListener('submit', async (e) => {
+  if (e.target.matches('.edit-form')) {
+    e.preventDefault();
+    const id = e.target.dataset.id;
+    const title = e.target.querySelector('[name=title]').value.trim();
+    const description = e.target.querySelector('[name=description]').value.trim();
+    if (!title) return alert('Title is required');
+    await fetch(`/apis/${id}/`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+      body: JSON.stringify({ title, description })
+    });
+    fetchTodos();
+    return;
+  }
+});
+
+// add form
+document.getElementById('add-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = document.getElementById('title').value.trim();
+  const description = document.getElementById('description').value.trim();
+  if(!title) return alert('Title is required');
+  await fetch('/apis/', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'X-CSRFToken': csrftoken
+    },
+    body: JSON.stringify({ title, description })
+  });
+  e.target.reset();
+  fetchTodos();
+});
+
+// load
+fetchTodos();
+</script>
+</body>
+</html>
