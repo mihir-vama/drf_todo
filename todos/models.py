@@ -1,14 +1,14 @@
 from django.db import models
 
-
 class User(models.Model):
-    username = models.TextField()
+    username = models.TextField(unique=True)
     password = models.TextField()
+
 class Todo(models.Model):
-    title = models.CharField(max_length=200)
+    title = models.TextField()
     description = models.TextField()
-    user = models.ForeignKey(User, on_delete=models.SET_NULL,
-        null=True, related_name='todo')
+    user = models.ForeignKey(User, on_delete=models.CASCADE,
+        null=True, related_name='todos')
 
     def __str__(self):
         return self.title
